@@ -87,7 +87,7 @@ def extract_molecule_list(filename,header_start):
                 line_list.append(line)
             else:
                 line_list.append(line)
-         molecule_list.append(line_list)
+        molecule_list.append(line_list)
     return(molecule_list)
 
 #Takes in a filename and the score as listed in the header and returns
