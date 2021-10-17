@@ -87,6 +87,7 @@ def extract_molecule_list(filename,header_start):
                 line_list.append(line)
             else:
                 line_list.append(line)
+         molecule_list.append(line_list)
     return(molecule_list)
 
 #Takes in a filename and the score as listed in the header and returns
@@ -133,14 +134,13 @@ def calc_rdkit_scores_for_graphing(rdkit_mols):
         #calculates QED properties and then farms out those numbers
         #to the various lists needed for graphing
         QED_props_list=Chem.QED.properties(mol)
-        for entry in QED_props_list:
-            mw_list.append(QED_props_list[0])
-            logp_list.append(QED_props_list[1])
-            hba_list.append(QED_props_list[2])
-            hbd_list.append(QED_props_list[3])
-            rot_bond_list.append(QED_props_list[5])
-            aro_ring_list.append(QED_props_list[6])
-            pains_alerts_list.append(QED_props_list[7])
+        mw_list.append(QED_props_list[0])
+        logp_list.append(QED_props_list[1])
+        hba_list.append(QED_props_list[2])
+        hbd_list.append(QED_props_list[3])
+        rot_bond_list.append(QED_props_list[5])
+        aro_ring_list.append(QED_props_list[6])
+        pains_alerts_list.append(QED_props_list[7])
         qed_list.append(Chem.QED.qed(mol,QED_props_list))
         sasa_list.append(calculateSAScore(mol))
     return [mw_list, logp_list, hba_list, hbd_list, rot_bond_list, \
