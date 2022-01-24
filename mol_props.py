@@ -16,6 +16,24 @@ from collections import defaultdict
 
 #itemgetter for sorting purposes
 from operator import itemgetter
+#reads in a data file of sing# Import modules for dealing with chemical information
+from rdkit import Chem as Chem
+from rdkit import DataStructs
+from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import AllChem as Chem2
+from rdkit.Chem import Descriptors as Desc
+from rdkit.Chem import Draw
+from rdkit.Chem import rdmolfiles as RDFile
+
+#Stuff for calculation of SASA by RDKit
+import pickle
+import os
+import os.path as op
+import math
+from collections import defaultdict
+
+#itemgetter for sorting purposes
+from operator import itemgetter
 #reads in a data file of single values - must be fed a datatype
 #and will return correctly types values. 
 def read_data_file(filename,datatype):
@@ -112,6 +130,22 @@ def extract_scores_from_list(list_of_molecules,score_type):
     return(score_list)
 
 
+
+def separate_top_molecules(list_of_molecules,score_type,num_sep):
+    sep_molecules=[]
+    mol_scores=[]
+    for i,entry in enumerate(list_of_molecules):
+        for line in entry:
+            if score_type in line:
+                mol_scores.append((i,float(line.split(":")[1].strip())))
+    mol_scores.sort(key = lambda x: x[1])
+    for i in range(0,num_sep):
+        sep_molecules.append(list_of_molecules[mol_scores[i][0]])
+    return(sep_molecules)
+
+
+
+
 # Takes a list of rdkitmols and returns the scores for graphing.
 # Current scores included in this function are:
 # Molecular Weight, LogP, #Aromatic Rings, #HDonors,
@@ -129,6 +163,8 @@ def calc_rdkit_scores_for_graphing(rdkit_mols):
     qed_list=[]
 #########################
     sasa_list=[]
+    spiro_list=[]
+    stereo_list=[]
 
     for mol in rdkit_mols:
         #calculates QED properties and then farms out those numbers
@@ -143,9 +179,62 @@ def calc_rdkit_scores_for_graphing(rdkit_mols):
         pains_alerts_list.append(QED_props_list[7])
         qed_list.append(Chem.QED.qed(mol,QED_props_list))
         sasa_list.append(calculateSAScore(mol))
+        spiro_list.append(rdMolDescriptors.CalcNumSpiroAtoms(mol))
+        stereo_list.append(rdMolDescriptors.CalcNumAtomStereoCenters(mol))
     return [mw_list, logp_list, hba_list, hbd_list, rot_bond_list, \
-            aro_ring_list, pains_alerts_list, qed_list, sasa_list]
+            aro_ring_list, pains_alerts_list, qed_list, sasa_list, \
+            stereo_list, spiro_list]
 
+#This one is for a list molecules, returns by molecule
+def calc_rdkit_scores_list_mol_for_graphing(rdkit_mols):
+    stats_by_mol=[]
+    for mol in rdkit_mols:
+        #calculates QED properties and then appends them as a group so they
+        # are all associated with the properties for each molecule
+        QED_props_list=Chem.QED.properties(mol)
+        mw = QED_props_list[0]
+        logp = QED_props_list[1]
+        hba = QED_props_list[2]
+        hbd = QED_props_list[3]
+        rot_bond = QED_props_list[5]
+        aro_ring = QED_props_list[6]
+        struct_alerts = QED_props_list[7]
+        qed = Chem.QED.qed(mol,QED_props_list)
+        sasa = calculateSAScore(mol)
+        spiro = rdMolDescriptors.CalcNumSpiroAtoms(mol)
+        stereo = rdMolDescriptors.CalcNumAtomStereoCenters(mol)
+        stats_by_mol.append([mw, logp, hba, hbd, rot_bond, aro_ring,\
+                            struct_alerts, qed, sasa, spiro, stereo])
+    return stats_by_mol
+
+######### This one is for a single molecule calculation.
+def calc_rdkit_scores_single_mol_for_graphing(mol):
+    stats_by_mol=[]
+    #calculates QED properties and then appends them as a group so they
+    # are all associated with the properties for each molecule
+    QED_props_list=Chem.QED.properties(mol)
+    mw = QED_props_list[0]
+    logp = QED_props_list[1]
+    hba = QED_props_list[2]
+    hbd = QED_props_list[3]
+    rot_bond = QED_props_list[5]
+    aro_ring = QED_props_list[6]
+    struct_alerts = QED_props_list[7]
+    psa = QED_props_list[4]
+    qed = Chem.QED.qed(mol,QED_props_list)
+    sasa = calculateSAScore(mol)
+    spiro = rdMolDescriptors.CalcNumSpiroAtoms(mol)
+    stereo = rdMolDescriptors.CalcNumAtomStereoCenters(mol)
+    return([mw, logp, hba, hbd, rot_bond, aro_ring,\
+            struct_alerts, qed, sasa, spiro, stereo, psa])
+
+def calc_spiro_stereo(rdkit_mols):
+    spiro_list=[]
+    stereo_list=[]
+    for mol in rdkit_mols:
+        spiro_list.append(rdMolDescriptors.CalcNumSpiroAtoms(mol))
+        stereo_list.append(rdMolDescriptors.CalcNumAtomStereoCenters(mol))
+    return((spiro_list,stereo_list))
 
 
 ###TANIMOTO COMPARISON OF FRAGMENTS
@@ -169,6 +258,88 @@ def du_to_h(mol_list):
                 line_change=mol_list[i][x][:47] + "H " + mol_list[i][x][49:]
                 mol_list[i][x] = line_change
     return(mol_list)
+
+#This function is currently built to graph the parameters extracted 
+#by the calc_rdkit_scores functions elsewhere in this library
+#SPLITS UP GRAPHING FOR ALL INTEGER VALUES OF SASA
+#Saves file in experiment_list[0] directory
+def graph_9panel_mol_props_by_sasa(experiment_list,workdir):
+    graph_values=["MW","LOGP","HBA","HBD","ROT","ARO","PAINS","QED","SASA","STER","SPIR"]
+    graph_titles=["Molecular Weight",\
+                "ALogP",\
+                "HBond Acceptors",\
+                "HBond Donors",\
+                "# Rotatable Bonds",\
+                "# Aromatic Rings",\
+                "# Structural Alerts",\
+                "QED",\
+                "Novartis Synthetic Accessibility",\
+                "Stereo Centers",\
+                "Spiro Atoms"]
+    for experiment in experiment_list:
+        data_list=[]
+        #data extraction from previously saved data
+        with open(f"{workdir}/{experiment}/{experiment}_props.dat") as f:
+            for line in f:
+                data_list.append(line.strip().split(","))
+        #converts all values to floats
+        for i,entry in enumerate(data_list):
+            data_list[i] = [float(x) for x in entry]
+        data_collected.append(data_list)
+
+    #this function graphs by SASA, which here is 0 to 10
+    for i in range(0,10):
+        fig,axs = plt.subplots(4,3,figsize=(20,15),dpi=500,sharey=True)
+        pos_x=0
+        pos_y=0
+        graph_val_position=0
+        pos = np.arange(len(experiment_list)+1,1,-1)
+        for val_ind, value in enumerate(graph_values):
+            data_list=[]
+            #separates out all molecule data by the SynthA
+            for exp_ind, experiment in enumerate(experiment_list):
+                #data_list.append([x[val_ind] for x in data_collected[exp_ind]])
+                data_list.append([x[val_ind] for x in data_collected[exp_ind] \
+                                if x[8] > i and x[8] < i+1])
+            for index, entry in enumerate(data_list):
+                #Just in the case there are NO MOLECULES MADE for this value, 
+                if len(entry) == 0:
+                    data_list[index]=[float('nan'), float('nan')]
+            if value == "MW":
+                plt.setp(axs[pos_x,pos_y], xlim=(0,850))
+                axs[pos_x,pos_y].violinplot(data_list,pos,vert=False,showmeans=True)
+            if value == "LOGP":
+                plt.setp(axs[pos_x,pos_y], xlim=(-8,10))
+                axs[pos_x,pos_y].violinplot(data_list,pos,vert=False,showmeans=True)
+            if value == "HBA" or value == "ROT":
+                plt.setp(axs[pos_x,pos_y], xlim=(0,16))
+                axs[pos_x,pos_y].boxplot(data_list,positions=pos,vert=False)
+            if (value == "HBD") or (value == "ARO"):
+                plt.setp(axs[pos_x,pos_y], xlim=(0,10))
+                axs[pos_x,pos_y].boxplot(data_list,positions=pos,vert=False)
+            if value == "SASA":
+                plt.setp(axs[pos_x,pos_y], xlim=(0,10))
+                axs[pos_x,pos_y].violinplot(data_list,pos,vert=False,showmeans=True)
+            if (value == "PAINS") or (value == "STER") or (value =="SPIR"):
+                plt.setp(axs[pos_x,pos_y], xlim=(0,5))
+                axs[pos_x,pos_y].boxplot(data_list,positions=pos,vert=False)
+            if value == "QED":
+                plt.setp(axs[pos_x,pos_y], xlim=(0,1))
+                axs[pos_x,pos_y].violinplot(data_list,pos,vert=False,showmeans=True)
+            axs[pos_x,pos_y].set_title(graph_titles[graph_val_position])
+            axs[pos_x,pos_y].set_yticks(pos)
+            axs[pos_x,pos_y].set_yticklabels(experiment_list)
+            if (pos_y > 0) and (pos_y % 2 == 0):
+                pos_x+=1
+                pos_y=0
+            else:
+                pos_y+=1
+            graph_val_position+=1
+            fig.subplots_adjust(top=0.94,hspace = 0.2)
+        st = fig.suptitle(f"{experiment[0]}_{i}_to_{i+1}",fontsize=20)
+        st.set_y(1.00)
+        plt.savefig(f"{workdir}/{experiment[0]}/zzz.{experiment[0]}_sasa_{i}.png")
+        plt.close()
 
 # Function that reads multi-molecule MOL2 files. Adapted from:
 # https://chem-workflows.com/articles/2019/07/18/building-a-multi-molecule-mol2-reader-for-rdkit/
@@ -219,6 +390,45 @@ def convert_list_to_rdkitmol(molecule_list):
         Chem.SanitizeMol(mol,sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_KEKULIZE^Chem.SanitizeFlags.SANITIZE_SETAROMATICITY)
     return(conversion_list)
 
+def convert_mol_to_rdkitmol(mol):
+    #  This function extracts all the molecules in the multi-molecule
+    #  MOL2 file `file` and returns a list of rdkit.Chem.rdchem.mol 
+    #  object.
+    #  
+    #  Variable         I/O          dtype           default value?
+    #  ------------------------------------------------------------
+    #  file              I           string                  None
+    #  mols              O           list                    N/A
+    #  mols[i]           O           rdkit.Chem.rdchem.mol   N/A
+
+
+    # does some cleaning in case there's any header information - 
+    # This will pull everything from @TRIPOS<MOLECULE> to ROOT
+    conversion_list=[]
+
+    temp_mol=[]
+    record=False
+    #runs through all the lines per molecule
+    for line in mol:
+        #checks for first line
+        if ("@<TRIPOS>MOLECULE") in line:
+            record=True
+            temp_mol.append(line)
+        #will record if @<TRIPOS>MOLECULE found
+        elif record==True:
+            temp_mol.append(line)
+        #if root is in line, we're done with this molecule for most small molecules
+        if ("ROOT") in line:
+            #block formatting
+            block = ",".join(temp_mol).replace(',','')
+            #conversion step
+            m=Chem.MolFromMol2Block(block,
+                                    sanitize=False,
+                                    cleanupSubstructures=False)
+            m.UpdatePropertyCache(strict=False)
+            Chem.SanitizeMol(m,sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_KEKULIZE^Chem.SanitizeFlags.SANITIZE_SETAROMATICITY)
+    
+            return(m)
 
 
 
