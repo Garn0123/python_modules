@@ -16,24 +16,7 @@ from collections import defaultdict
 
 #itemgetter for sorting purposes
 from operator import itemgetter
-#reads in a data file of sing# Import modules for dealing with chemical information
-from rdkit import Chem as Chem
-from rdkit import DataStructs
-from rdkit.Chem import rdMolDescriptors
-from rdkit.Chem import AllChem as Chem2
-from rdkit.Chem import Descriptors as Desc
-from rdkit.Chem import Draw
-from rdkit.Chem import rdmolfiles as RDFile
 
-#Stuff for calculation of SASA by RDKit
-import pickle
-import os
-import os.path as op
-import math
-from collections import defaultdict
-
-#itemgetter for sorting purposes
-from operator import itemgetter
 #reads in a data file of single values - must be fed a datatype
 #and will return correctly types values. 
 def read_data_file(filename,datatype):
