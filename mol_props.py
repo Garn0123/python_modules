@@ -182,7 +182,8 @@ def calc_rdkit_scores_list_mol_for_graphing(rdkit_mols):
         rot_bond = QED_props_list[5]
         aro_ring = QED_props_list[6]
         struct_alerts = QED_props_list[7]
-        qed = Chem.QED.qed(mol,QED_props_list)
+        #qed = Chem.QED.qed(mol,QED_props_list)
+        qed = Chem.QED.qed(mol)
         sasa = calculateSAScore(mol)
         spiro = rdMolDescriptors.CalcNumSpiroAtoms(mol)
         stereo = rdMolDescriptors.CalcNumAtomStereoCenters(mol)
@@ -204,7 +205,8 @@ def calc_rdkit_scores_single_mol_for_graphing(mol):
     aro_ring = QED_props_list[6]
     struct_alerts = QED_props_list[7]
     psa = QED_props_list[4]
-    qed = Chem.QED.qed(mol,QED_props_list)
+    #qed = Chem.QED.qed(mol,QED_props_list)
+    qed = Chem.QED.qed(mol)
     sasa = calculateSAScore(mol)
     spiro = rdMolDescriptors.CalcNumSpiroAtoms(mol)
     stereo = rdMolDescriptors.CalcNumAtomStereoCenters(mol)
